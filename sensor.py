@@ -14,7 +14,7 @@ import logging
 
 
 """ Constants """
-NATIVE_UNIT_OF_MEASUREMENT = "EUR/mWh"
+NATIVE_UNIT_OF_MEASUREMENT = "EUR/MWh"
 DEVICE_CLASS = "monetary"
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,46 +69,61 @@ class OTERateSensor(SensorEntity):
         """
         self._get_current_value()
 
+    def _get_data_from_ote_cr(self, date):
+        try:
+            cost_history = dict()
+            cost_string = "Cena (EUR/MWh)"
+            hour_string = "Hodina"
+            cost_data = "https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data"
+
+            params = dict (
+                date = date.strftime('%Y-%m-%d')
+            )
+
+            response = requests.get(url=cost_data, params=params)
+            json = response.json()
+            cost_axis = ""
+            hour_axis = ""
+            for key in json['axis'].keys():
+                if json['axis'][key]['legend'] == cost_string:
+                    cost_axis = key
+                if json['axis'][key]['legend'] == hour_string:
+                    hour_axis = key
+
+            for values in json['data']['dataLine']:
+                if values['title'] == cost_string:
+                    for data in values['point']:
+                        history_index = int(data[hour_axis])-1
+                        cost_history[history_index] = float(data[cost_axis])
+            
+            return cost_history
+        except:
+            self._available = False
+            _LOGGER.exception("Error occured while retrieving data from ote-cr.cz.")
+
 
     def _get_current_value(self):
-        """ Parse the data and return value in EUR/kWh
+        """ Parse the data and return value in EUR/MWh
         """
 
         try:
-          current_cost = 0
-          cost_history = dict()
-          history_index = 0
-          cost_string = "Cena (EUR/MWh)"
-          hour_string = "Hodina"
-          cost_data = "https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data"
+            current_cost = 0
+            today_date = datetime.datetime.now()
+            tomorrow_date = today_date + datetime.timedelta(days=1)
 
-          date = datetime.datetime.now()
-          params = dict (
-              date = date.strftime('%Y-%m-%d')
-          )
+            today_cost_data = self._get_data_from_ote_cr(today_date)
+            tomorrow_cost_data = self._get_data_from_ote_cr(tomorrow_date)
+            
+            #transform tomorrow's data
+            cost_history = today_cost_data
+            for key, value in tomorrow_cost_data.items():
+                cost_history[int(key)+24] = value
 
-          response = requests.get(url=cost_data, params=params)
-          json = response.json()
-          cost_axis = ""
-          hour_axis = ""
-          for key in json['axis'].keys():
-              if json['axis'][key]['legend'] == cost_string:
-                  cost_axis = key
-              if json['axis'][key]['legend'] == hour_string:
-                  hour_axis = key
+            current_cost = cost_history[today_date.hour]
 
-
-          for values in json['data']['dataLine']:
-              if values['title'] == cost_string:
-                  for data in values['point']:
-                     history_index = int(data[hour_axis])-1
-                     cost_history[history_index] = float(data[cost_axis])
-                  current_cost = cost_history[date.hour]
-
-
-          self._value = current_cost
-          self._attr = cost_history
-          self._available = True
+            self._value = current_cost
+            self._attr = cost_history
+            self._available = True
         except:
-          self._available = False
-          _LOGGER.exception("Error occured while retrieving data from ote-cr.cz.")
+            self._available = False
+            _LOGGER.exception("Error occured while retrieving data from ote-cr.cz.")
