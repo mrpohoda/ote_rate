@@ -80,7 +80,7 @@ class OTERateSensor(SensorEntity):
                 date = date.strftime('%Y-%m-%d')
             )
 
-            response = requests.get(url=cost_data, params=params)
+            response = requests.get(url=cost_data, params=params, timeout=5)
             json = response.json()
             cost_axis = ""
             hour_axis = ""
