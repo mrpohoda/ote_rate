@@ -11,6 +11,7 @@ import requests
 import json
 import datetime
 import logging
+import gc
 
 
 """ Constants """
@@ -68,6 +69,10 @@ class OTERateSensor(SensorEntity):
         This is the only method that should fetch new data for Home Assistant.
         """
         self._get_current_value()
+        
+        # collect method immediately free the resource of
+        # non-referenced object.
+        gc.collect()
 
     def _get_data_from_ote_cr(self, date):
         try:
